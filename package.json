@@ -1,0 +1,22 @@
+{
+  "name": "Zanganken-Bot-Pokemon-Showdown",
+  "version": "2.0.1",
+  "description": "Bot conçu pour Pokémon Showdown, n'a pas vocation à faire de la modération.",
+  "main": "main.js",
+  "scripts": {
+    "start": "node main"
+  },
+  "repository": {
+	"type": "git",
+	"url": "https://github.com/zanganken/pokemon-showdown-bot.git"
+  },
+  "author": {
+    "name": "Zanganken"
+  },
+  "dependencies": {
+    "colors": "^1.4.0",
+    "date-fns": "^2.21.3",
+    "websocket": "^1.0.34"
+  },
+  "private": true
+}
