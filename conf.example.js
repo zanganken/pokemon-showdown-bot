@@ -17,7 +17,9 @@ const Conf = {
 	wl: new Map(),
 	
 	// délais minimum entre les messages du bot
-	MESSAGE_THROTTLE: 650
+	MESSAGE_THROTTLE: 650,
+	// délai de reconnexion en cas de déconnexion
+	RECONNECT_TIMEOUT: 30000
 }
 
 module.exports = Conf
