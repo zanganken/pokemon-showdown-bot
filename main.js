@@ -11,6 +11,10 @@ const Room = require('./bo/Room')
 // Déclaration des variables globales pour éviter les problèmes de dépendances circulaires
 global.Parser = require('./parser')
 global.Cmds = require('./cmds')
+global.Room = require('./bo/Room')
+global.User = require('./bo/User')
+
+Parser.initCustomCmds()
 
 const connect = () => {
 	const ws = new WebSocketClient();

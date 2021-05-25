@@ -1,14 +1,21 @@
 const url = require('url')
 const https = require('https')
+//const fs = require('fs')
+const MongoClient = require('mongodb').MongoClient
+const PastebinAPI = require('pastebin-ts')
 
-const Room = require('./bo/Room')
-const User = require('./bo/User')
+const {console: {ok, info, cmdr, error}, toId, Connection} = require('./utils')
+const {serverId, nick, pwd, cmdChar, rankArray, MONGODB_URI, MONGODB_DATABASE, PASTEBIN_API_KEY, PASTEBIN_USERAME, PASTEBIN_PASSWORD} = require('./conf')
+const {customCmds} = require('./data')
 
-const {console: {ok, info, cmdr}, toId, Connection} = require('./utils')
-const {serverId, nick, pwd, cmdChar, rankArray} = require('./conf')
+const pastebin = new PastebinAPI({
+	'api_dev_key': PASTEBIN_API_KEY,
+	'api_user_name': PASTEBIN_USERAME,
+	'api_user_password': PASTEBIN_PASSWORD
+})
 
 const Parser = {
-	actionUrl: url.parse('https://play.pokemonshowdown.com/~~' + serverId + '/action.php'),
+	actionUrl: url.parse(`https://play.pokemonshowdown.com/~~${serverId}/action.php`),
 	
 	data: function(msg) {
 		if(msg.charAt(0) === 'a') {
@@ -42,10 +49,14 @@ const Parser = {
 							
 							room.users = users
 							
-							ok('Room ' + room.id + ' rejointe')
+							ok(`Room ${room.id} rejointe`)
 							
 							// On stop le traitement
 							return
+						}
+						
+						if (spl[0].substr(1) === 'deinit') {
+							Room.list.delete(room.id)
 						}
 					}
 				}
@@ -79,14 +90,14 @@ const Parser = {
 				
 				if(pwd) {
 					reqOptions.method = 'POST'
-					data = 'act=login&name=' + nick + '&pass=' + pwd + '&challengekeyid=' + challengeId + '&challenge=' + challengeStr
+					data = `act=login&name=${nick}&pass=${pwd}&challengekeyid=${challengeId}&challenge=${challengeStr}`
 					reqOptions.headers = {
 						'Content-Type': 'application/x-www-form-urlencoded',
 						'Content-Length': data.length
 					}
 				} else {
 					reqOptions.method = 'GET'
-					reqOptions.path += '?act=getassertion&userid=' + toId(nick) + '&challengekeyid=' + challengeId + '&challenge=' + challengeStr
+					reqOptions.path += `?act=getassertion&userid=${toId(nick)}&challengekeyid=${challengeId}&challenge=${challengeStr}`
 				}
 				
 				let req = https.request(reqOptions, function(res) {
@@ -103,7 +114,7 @@ const Parser = {
 							process.exit(-1)
 						}
 						if(data.length < 50) {
-							error('failed to log in: ' + data)
+							error(`failed to log in: ${data}`)
 							process.exit(-1)
 						}
 
@@ -132,17 +143,17 @@ const Parser = {
 							if (data.actionsuccess) {
 								data = data.assertion
 							} else {
-								error('could not log in; action was not successful: ' + JSON.stringify(data))
+								error(`could not log in; action was not successful: ${JSON.stringify(data)}`)
 								process.exit(-1)
 							}
 						} catch (e) {}
 						
-						Connection.send('|/trn ' + nick + ',154,' + data)
+						Connection.send(`|/trn ${nick},154,${data}`)
 					}.bind(this))
 				}.bind(this))
 				
 				req.on('error', function(err) {
-					error('login error: ' + err.stack)
+					error(`login error: ${err.stack}`)
 				})
 				
 				if(data) req.write(data)
@@ -157,7 +168,7 @@ const Parser = {
 					}
 					
 					Connection.send('|/avatar 154');
-					ok('Connecté en tant que ' + spl[2].substr(1))
+					ok(`Connecté en tant que ${spl[2].substr(1)}`)
 
 					// On rejoint les rooms du fichier conf.js
 					Room.joinAll();
@@ -189,8 +200,8 @@ const Parser = {
 					spl = spl.slice(4).join('|')
 					
 					if (spl.startsWith('/invite ') && user.hasRank('%') && !(toId(spl.substr(8)) === 'lobby' && Config.serverid === 'showdown')) {
-						Connection.send('|/join ' + spl.substr(8))
-						info(nick + " a rejoint la room \"" + spl.substr(8) + "\" sur demande de " + user.name)
+						Connection.send(`|/join ${spl.substr(8)}`)
+						info(`${nick} a rejoint la room "${spl.substr(8)}" sur demande de ${user.name}`)
 					} else {
 						this.chatMessage(spl, user, user)
 					}
@@ -226,18 +237,23 @@ const Parser = {
 			// On va boucler la liste des ranks en prenant le rank de l'utilisateur comme référence
 			for(let i = rankArray.indexOf(user.rank); i >= 0; i--) {
 				let cmdsOfRank = Cmds[rankArray[i]]
+				let customCmdsOfRank = customCmds[rankArray[i]]
 				
 				while(Object.keys(cmdsOfRank).indexOf(cmdName) > -1) {
 					if(typeof cmdsOfRank[cmdName] === 'string') {
 						cmdName = cmdsOfRank[cmdName]
 					} else if(typeof cmdsOfRank[cmdName] === 'function') {
 						cmdsOfRank[cmdName](spl, user, room)
-						cmdr("Commande \"" + cmdName + "\" par " + user.name + " [sur " + room.id +"]: " + spl)
+						cmdr(`Commande "${cmdName}" par ${user.name} [sur ${room.id}]: ${spl}`)
 						
 						return true
 					} else {
 						break
 					}
+				}
+			
+				if(customCmdsOfRank?.has(cmdName)) {
+					this.say(customCmdsOfRank.get(cmdName).txt, room)
 				}
 			}
 		}
@@ -249,12 +265,97 @@ const Parser = {
 		
 		for(let msg of spl) {
 			if(Room.getRoom(targetId)) {
-				Connection.send((targetId !== 'lobby' ? targetId : '') + '|' + msg)
+				Connection.send(`${targetId !== 'lobby' ? targetId : ''}|${msg}`)
 			} else {
-				Connection.send('|/pm ' + targetId + ', ' + msg)
+				Connection.send(`|/pm ${targetId}, ${msg}`)
 			}
 		}
-	}
+	},
+	
+	initCustomCmds: async function() {
+		info("Initialisation des customCmds")
+		
+		let client = new MongoClient(MONGODB_URI, {
+			useNewUrlParser: true,
+			useUnifiedTopology: true,
+		})
+		
+		try {
+			await client.connect()
+			
+			let cursor = client.db(MONGODB_DATABASE).collection('customCmds').find()
+			
+			await cursor.forEach(doc => {
+				for(let cmdName in doc.cmds) {
+					customCmds[doc.rank]?.set(cmdName, doc.cmds[cmdName])
+				}
+			})
+			
+			ok("customCmds initialisées")
+			
+			await cursor.close()
+		} catch(e) {
+			error(e)
+		} finally {
+			await client.close()
+		}
+	},
+	
+	updateCustomCmds: async function(rank) {
+		let client = new MongoClient(MONGODB_URI, {
+			useNewUrlParser: true,
+			useUnifiedTopology: true,
+		})
+		
+		let result
+		
+		try {
+			await client.connect()
+			let customCmdsCollection = client.db(MONGODB_DATABASE).collection('customCmds')
+			
+			let filter = {
+				rank: rank
+			}
+			let updateCmds = {
+				$set: {
+					cmds: {}
+				}
+			}
+			let options = {
+				upsert: true
+			}
+			
+			customCmds[rank].forEach((value, key) => {
+				updateCmds["$set"].cmds[key] = value
+			})
+			
+			result = await customCmdsCollection.updateOne(filter, updateCmds, options)
+		} catch(e) {
+			error(e)
+		} finally {
+			client.close()
+		}
+		
+		return result?.modifiedCount
+	},
+	
+	upToPastebin: function(title, text, room) {
+		//fs.writeFileSync("./pastebin.txt", text)
+		
+		pastebin.createPaste({
+			title: title,
+			text: text,
+			format: null,
+			privacy: 1,
+			expiration: '10M'
+		}).then(data => {
+			this.say(data, room)
+		}).catch(err => {
+			this.say(`Une erreur est survenue, impossible de récupérer la liste des commandes.`, room)
+			// Something went wrong
+			error(err)
+		})
+	},
 }
 
 module.exports = Parser

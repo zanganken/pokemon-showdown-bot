@@ -1,8 +1,6 @@
-const {console: {info}, toId} = require('./utils')
-const {nick} = require('./conf')
-
-const Room = require('./bo/Room')
-const User = require('./bo/User')
+const {console: {info, debug}, toId} = require('./utils')
+const {nick, rankArray} = require('./conf')
+const {customCmds} = require('./data')
 
 const {say} = Parser
 
@@ -11,42 +9,55 @@ const Cmds = {
 	' ': {
 		quit: 'leave',
 		leave: (args, user, room) => {
-			if(args.length === 0 && room instanceof Room && user.hasRank('@')) {
-				Room.leaveRoom(room.id)
-			} else if(room instanceof User) {
-				let roomId = toId(args[0])
+			if(room instanceof User && args[0]) {
+				let target = Room.getRoom(toId(args[0]))
 				
-				if(Room.getRoom(roomId)?.getUser(user.id)?.hasRank('@')) {
-					Room.leaveRoom(roomId)
-					info(nick + " a quitté la room \"" + roomId + "\" sur demande de " + user.name)
+				if(user.hasRankInRoom('@', target)) {
+					Cmds['@'].leave(args, user, room)
 				}
 			}
-		}
+		},
+		
+		say: (args, user, room) => {
+			if(room instanceof User && args[0]) {
+				let target = Room.getRoom(toId(args[0]))
+				
+				if(user.hasRankInRoom('%', target)) {
+					args[0] = target.id
+					
+					Cmds['@'].say(args, user, room)
+				}
+			}
+		},
 	},
 // Commandes accessibles à partir de voice
 	'+': {
 		chintok: (args, user, room) => {
-			say("Salut, je suis un bot développé en **Jaaj**vascript.", room)
-		}
+			say(`Salut, je suis un bot développé en **Jaaj**vascript. Mon code est visible sur https://github.com/zanganken/pokemon-showdown-bot.`, room)
+		},
+		
+		comlist: (args, user, room) => {
+			let text = ``
+			
+			for(let rank in customCmds) {
+				customCmds[rank].forEach((cmd, cmdName) => {
+					text += `[${rank}]${cmdName} (par ${cmd.author || 'inconnu'}): ${cmd.txt}\n`
+				})
+			}
+			
+			Parser.upToPastebin("Liste des commandes", text, room)
+		},
 	},
 // Commandes accessibles à partir de driver
-	'%': {
-		rooms: (args, user, room) => {
-			console.log(Room.list)
-		}
-	},
+	'%': {},
 // Commandes accessibles à partir de moderator
 	'@': {
 		quit: 'leave',
 		leave: (args, user, room) => {
-			// S'il s'agit d'un PM d'un global[@] ou +
-			if(room instanceof User) {
-				let roomId = toId(args[0])
-				
-				if(Room.getRoom(roomId)) {
-					Room.leaveRoom(roomId)
-					info(nick + " a quitté la room \"" + roomId + "\" sur demande de " + user.name)
-				}
+			let roomId = args[0] ? toId(args[0]) : room.id
+			
+			if(Room.leaveRoom(roomId)) {
+				info(`${nick} a quitté la room "${roomId}" sur demande de ${user.name}`)
 			}
 		},
 		
@@ -58,12 +69,75 @@ const Cmds = {
 			if(target) {
 				let msg = args.join(' ')
 				
-				info(user.name + " [sur " + target.id +"]: " + msg)
-				say(msg, target)
+				if(msg) {
+					info(`${user.name} [sur ${target.id}]: ${msg}`)
+					say(msg, target)
+				} else {
+					say(`Il faut spécifier le message à afficher par le bot (**.say room message**)`, user)
+				}
+			} else if(!roomId) {
+				say(`Il faut spécifier la room, puis le message à afficher par le bot (**.say room message**)`, user)
 			} else {
-				say("Je ne suis pas dans la room **\"" + roomId + "\"**.\nJ'accepte les **/invit nomDeLaRoom** des **global[%] ou +** ou des **personnes whitelistées**.", user)
+				say(`Je ne suis pas dans la room **"${roomId}"**.\nJ'accepte les **/invite nomDeLaRoom** des **global[%] ou +** ou des **personnes whitelistées**.`, user)
 			}
 		},
+		
+		// Fonctions relatives à data.customCmds
+		add: async (args, user, room) => {
+			if(!user.hasSuperRank('@')) return
+			
+			let rank = '+'
+			
+			if(rankArray.indexOf(args[0].charAt(0)) > -1) {
+				rank = args[0].charAt(0)
+				args[0] = args[0].substr(1)
+			}
+			
+			let cmdName = args.shift()
+			let txt = args.join(' ')
+			let author = user.name
+			
+			customCmds[rank].set(cmdName, {
+				txt: txt,
+				author: author,
+				date: new Date()
+			})
+			
+			if(await Parser.updateCustomCmds(rank) > 0) {
+				say(`Commande [${rank}]${cmdName} ajoutée.`, room)
+			} else {
+				customCmds[rank].delete(cmdName)
+				
+				say(`Échec de l'ajout de la commande [${rank}]${cmdName}.`, room)
+			}
+		},
+		del: 'delete',
+		delete: async (args, user, room) => {
+			if(!user.hasSuperRank('@')) return
+			
+			let rank = '+'
+			
+			if(rankArray.indexOf(args[0].charAt(0)) > -1) {
+				rank = args[0].charAt(0)
+				args[0] = args[0].substr(1)
+			}
+			
+			let cmdName = args.shift()
+			
+			if(user.hasRank(rank) && customCmds[rank]?.has(cmdName)) {
+				let cmdCopy = customCmds[rank].get(cmdName)
+				
+				customCmds[rank].delete(cmdName)
+				
+				if(await Parser.updateCustomCmds(rank) > 0) {
+					say(`Commande [${rank}]${cmdName} supprimée.`, room)
+				} else {
+					customCmds[rank].set(cmdName, cmdCopy)
+					
+					say(`Échec de la suppression de la commande [${rank}]${cmdName}.`, room)
+				}
+			}
+		}
 	},
 // Commandes accessibles à partir de room owner
 	'#': {},

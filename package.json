@@ -7,8 +7,8 @@
     "start": "node main"
   },
   "repository": {
-	"type": "git",
-	"url": "https://github.com/zanganken/pokemon-showdown-bot.git"
+    "type": "git",
+    "url": "https://github.com/zanganken/pokemon-showdown-bot.git"
   },
   "author": {
     "name": "Zanganken"
@@ -16,6 +16,8 @@
   "dependencies": {
     "colors": "^1.4.0",
     "date-fns": "^2.21.3",
+    "mongodb": "^3.6.8",
+    "pastebin-ts": "^1.2.0",
     "websocket": "^1.0.34"
   },
   "private": true

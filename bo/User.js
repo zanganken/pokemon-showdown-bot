@@ -1,5 +1,5 @@
 const {toId} = require('../utils')
-const {wl, rankArray} = require('../conf')
+const {wl, rankArray, rooms} = require('../conf')
 
 class User {
 	#id
@@ -33,6 +33,20 @@ class User {
 		let userEffectiveRank = wl.has(this.id) ? rankArray.indexOf(wl.get(this.id)) : rankArray.indexOf(this.rank)
 		
 		if(userEffectiveRank >= rankIndex) return true
+		
+		return false
+	}
+	
+	hasRankInRoom(rank, room) {
+		if(room?.getUser(this.id)?.hasRank(rank)) return true
+		
+		return false
+	}
+	
+	hasSuperRank(rank) {
+		for(let roomId of rooms) {
+			if(this.hasRankInRoom(rank, Room.getRoom(roomId))) return true
+		}
 		
 		return false
 	}

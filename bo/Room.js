@@ -1,4 +1,3 @@
-const User = require('./User')
 const {rooms, privateRooms} = require('../conf')
 const {Connection, toId} = require('../utils')
 
@@ -48,7 +47,11 @@ class Room {
 		if(this.#rooms.has(roomId)) {
 			Connection.send('|/leave ' + roomId)
 			this.#rooms.delete(roomId)
+			
+			return true
 		}
+		
+		return false
 	}
 // -------------------------
 // INSTANCE VARS AND METHODS

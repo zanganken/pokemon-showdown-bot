@@ -66,13 +66,13 @@ var Utils = {
 				str += chars.charAt(~~(Math.random() * l))
 			}
 			
-			return 'ws://' + server + ':' + port + '/showdown/' + ~~(Math.random() * 1000) + '/' + str + '/websocket'
+			return `ws://${server}:${port}/showdown/${~~(Math.random() * 1000)}/${str}/websocket`
 		}
 	},
 	
 	toId: text => {
 		return text?.toLowerCase().replace(/[^a-z0-9]/g, '')
-	},
+	}
 }
 
 module.exports = Utils
